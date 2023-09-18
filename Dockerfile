@@ -6,13 +6,13 @@ WORKDIR /app
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 
-RUN rustup target add x86_64-unknown-linux-musl
-RUN cargo build --release --target x86_64-unknown-linux-musl
+RUN apt update && apt install -y libssl-dev
+RUN cargo build --release
 
 # Runtime
-FROM alpine:3.18.3
+FROM rust:1.72
 
-COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/concat_video /usr/local/bin/concat_video
-ENV PORT 8080
+COPY --from=builder /app/target/release/concat_video /usr/local/bin/concat_video
+RUN mkdir data
 
-CMD ["concat_video"]
+ENTRYPOINT ["concat_video"]

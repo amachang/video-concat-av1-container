@@ -1,37 +1,64 @@
-use std::env;
-use tokio;
-use serde_json;
-use base64::{
-    Engine,
-    engine::general_purpose as base64_general,
+use std::{
+    env,
+    path::Path,
 };
-use warp::{
-    self,
-    Filter,
+use google_cloud_storage::{
+    client::{
+        Client,
+        ClientConfig,
+    },
+    http::objects::{
+        download::Range,
+        get::GetObjectRequest,
+    },
 };
+use tokio::{
+    fs::File,
+    io::AsyncWriteExt,
+};
+use futures::stream::StreamExt;
 
 #[tokio::main]
 async fn main() {
-    let port = match env::var("PORT") {
-        Ok(port) => match port.parse::<u16>() {
-            Ok(port) => port,
-            Err(err) => panic!("Port is not valid uint: {:}", err)
-        }
-        Err(err) => panic!("Port not set or invalid utf-8: {:}", err),
+    let bucket = match env::var("BUCKET") {
+        Ok(bucket) => bucket, 
+        Err(err) => panic!("BUCKET env var not set or invalid utf-8: {:}", err),
     };
-    let pubsub_handler = warp::post()
-        .and(warp::path("pubsub"))
-        .and(warp::body::json())
-        .map(|data: serde_json::Value| {
-            if let Some(message) = data.get("message") {
-                if let Some(message) = message.get("data") {
-                    let message = base64_general::STANDARD.decode(message.as_str().unwrap_or("")).unwrap_or_default();
-                    let message = String::from_utf8(message).unwrap_or_default();
-                    println!("Received message: {}", message);
-                };
-            };
-            warp::reply::json(&"OK")
-        });
+    let object_ids = env::args().skip(1).collect();
 
-    warp::serve(pubsub_handler).run(([0, 0, 0, 0], port)).await;
+    let config = ClientConfig::default().with_auth().await.expect("Couldn't auth");
+
+    download_objects(config, bucket, object_ids).await;
 }
+
+async fn download_objects(config: ClientConfig, bucket: String, object_ids: Vec<String>) {
+    let client = Client::new(config);
+    for object_id in object_ids.into_iter() {
+        download_object(&client, bucket.clone(), object_id).await;
+    }
+}
+
+async fn download_object(client: &Client, bucket: String, object_id: String) {
+    let Ok(mut object_stream) = client.download_streamed_object(&GetObjectRequest {
+        bucket: bucket,
+        object: object_id.clone(),
+        ..Default::default()
+    }, &Range::default()).await else {
+        panic!("Couldn't get object stream: {:}", object_id);
+    };
+
+    let save_path = Path::new("data").join(&object_id);
+    let Ok(mut file) = File::create(save_path.clone()).await else {
+        panic!("Couldn't create the save_path: {:}", save_path.display());
+    };
+
+    while let Some(item) = object_stream.next().await {
+        let Ok(bytes) = item else {
+            panic!("Couldn't receive bytes in object: {:}", object_id);
+        };
+        if let Err(err) = file.write_all(&bytes).await {
+            panic!("Couldn't write bytes to file: {:} ({:})", save_path.display(), err);
+        };
+    }
+}
+
