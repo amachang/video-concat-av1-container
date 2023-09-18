@@ -19,7 +19,7 @@ COPY --from=mwader/static-ffmpeg:6.0 /ffmpeg /usr/local/bin/
 COPY --from=mwader/static-ffmpeg:6.0 /ffprobe /usr/local/bin/
 
 # if needs more quality, edit here like:
-# MAX_CRF=20 ENOUGH_VMAF=98
+# MIX_CRF=20 ENOUGH_VMAF=98
 ENV MIN_CRF 40
 ENV ENOUGH_VMAF 80
 
