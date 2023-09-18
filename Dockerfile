@@ -13,5 +13,6 @@ RUN cargo build --release --target x86_64-unknown-linux-musl
 FROM alpine:3.18.3
 
 COPY --from=builder /app/target/x86_64-unknown-linux-musl/release/concat_video /usr/local/bin/concat_video
+ENV PORT 8080
 
 CMD ["concat_video"]
