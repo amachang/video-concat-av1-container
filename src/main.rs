@@ -33,14 +33,8 @@ use futures::stream::StreamExt;
 async fn main() {
     let input_bucket = get_env_string("INPUT_BUCKET");
     let output_bucket = get_env_string("OUTPUT_BUCKET");
-    let enough_vmaf = match get_env_string("ENOUGH_VMAF").parse::<u8>() {
-        Ok(enough_vmaf) => enough_vmaf,
-        Err(err) => panic!("ENOUGH_VMAF couldn't parse as unsigned int: {:}", err),
-    };
-    let min_crf = match get_env_string("MIN_CRF").parse::<u8>() {
-        Ok(min_crf) => min_crf,
-        Err(err) => panic!("MIN_CRF couldn't parse as unsigned int: {:}", err),
-    };
+    let enough_vmaf = get_env_u8("ENOUGH_VMAF");
+    let min_crf = get_env_u8("MIN_CRF");
 
     let mut args = env::args().skip(1);
 
@@ -50,16 +44,15 @@ async fn main() {
     let output_object_path = Path::new("output").join(&output_object_id);
 
     let object_ids = args.collect::<Vec<_>>();
-    if object_ids.len() == 0 {
-        panic!("No gcs object id given");
-    }
-
     let config = ClientConfig::default().with_auth().await.expect("Couldn't auth");
     let client = Client::new(config);
 
     let object_paths = download_objects(&client, input_bucket, object_ids).await;
 
-    video::encode_best_effort(object_paths, &output_object_path, enough_vmaf, min_crf);
+    match video::encode_best_effort(object_paths, &output_object_path, enough_vmaf, min_crf) {
+        Err(err) => panic!("Encode Failed: {:}", err),
+        _ => (),
+    };
 
     upload_object(&client, output_bucket, output_object_id, output_object_path).await
 }
@@ -125,7 +118,15 @@ async fn upload_object(client: &Client, bucket: String, object_id: String, path:
 
 fn get_env_string(name: &str) -> String {
     match env::var(name) {
-        Ok(bucket) => bucket, 
+        Ok(v) => v, 
         Err(err) => panic!("{:} env var not set or invalid utf-8: {:}", name, err),
     }
 }
+
+fn get_env_u8(name: &str) -> u8 {
+    match get_env_string(name).parse::<u8>() {
+        Ok(v) => v,
+        Err(err) => panic!("{:} couldn't parse as an 8bit unsigned int: {:}", name, err),
+    }
+}
+
