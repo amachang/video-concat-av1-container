@@ -28,9 +28,12 @@ use tokio::{
 };
 use tokio_util::io::ReaderStream;
 use futures::stream::StreamExt;
+use env_logger;
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+
     let input_bucket = get_env_string("INPUT_BUCKET");
     let output_bucket = get_env_string("OUTPUT_BUCKET");
     let enough_vmaf = get_env_u8("ENOUGH_VMAF");
